@@ -1,0 +1,78 @@
+# --------------------------------------------------------------------------#
+# Copyright (C) 202  - Present by Tibit Communications, Inc.                #
+# All rights reserved.                                                      #
+#                                                                           #
+#    _______ ____  _ ______                                                 #
+#   /_  __(_) __ )(_)_  __/                                                 #
+#    / / / / __  / / / /                                                    #
+#   / / / / /_/ / / / /                                                     #
+#  /_/ /_/_____/_/ /_/                                                      #
+#                                                                           #
+# --------------------------------------------------------------------------#
+
+# Automated deployment configuration for VOLTHA POD in Chip's office
+
+---
+
+
+# Change default values in tests
+ONOS_REST_PORT: 30120
+ONOS_SSH_PORT: 30115
+OLT_PORT: 9191
+KUBERNETES_CONF: $HOME/.kube/k8s-config-cb-office
+
+# This tells the control node how to reach the Kubernetes nodes
+nodes:
+  -
+    ip: '192.169.122.111'
+    user: 'voltha'
+    pass: 'admin'
+
+# The pipeline requires this even though we don't have a fabric switch
+fabric_switches: []
+
+olts:
+  -
+    ip:       70:b3:d5:52:36:34     # Use 'ip' as mac-address so we do not have to modify scripts too much
+    mac:      70:b3:d5:52:36:34
+    user:     root
+    pass:     onl
+    sship:    192.168.2.22
+    fortygig: False
+    serial:   FX2819001573
+
+hosts:
+  src:
+    -
+      ip: 127.0.0.1
+      user: cord
+      pass: cord
+      dp_iface_name: eth1
+      container_type: LXC
+      container_name: voltha-client
+      onu: ALPHe3d1ce7b
+      c_tag: 11
+      s_tag: 11
+      onu_type: 'alpha'
+      power_switch_port: 2
+
+  dst:
+    -
+      dp_iface_ip_qinq: 192.168.11.254
+      ip: null
+      user: null
+      pass: null
+      noroot_ip: 127.0.0.1
+      noroot_user: cord
+      noroot_pass: cord
+      dp_iface_name: enp2s0f1
+      dp_iface_ip: null
+      dp_iface_gateway: null
+      container_type: null
+      container_name: null
+
+web_power_switch:
+  ip: '10.76.28.23'
+  user: 'cord'
+  password: 'cord'
+  type: 'DLI'
