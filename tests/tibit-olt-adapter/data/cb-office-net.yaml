@@ -16,24 +16,28 @@
 
 
 # Change default values in tests
+has_dataplane: false              # TODO: Set to true when ready...
+teardown_device: true
 ONOS_REST_PORT: 30120
 ONOS_SSH_PORT: 30115
 OLT_PORT: 9191
-KUBERNETES_CONF: $HOME/.kube/k8s-config-cb-office
+# KUBERNETES_CONF: $HOME/.kube/k8s-config-cb-office
 
 # This tells the control node how to reach the Kubernetes nodes
 nodes:
-  -
-    ip: '192.169.122.111'
-    user: 'voltha'
-    pass: 'admin'
+  - ip: '127.0.0.1'
+#
+# Values below once we can easily contact VM with k8s
+#    ip: '192.169.122.111'
+#    user: 'voltha'
+#    pass: 'admin'
 
 # The pipeline requires this even though we don't have a fabric switch
 fabric_switches: []
 
 olts:
   -
-    ip:       70:b3:d5:52:36:34     # Use 'ip' as mac-address so we do not have to modify scripts too much
+    ip:       70:b3:d5:52:36:34     # TODO: Temporary 'just in case'
     mac:      70:b3:d5:52:36:34
     user:     root
     pass:     onl
@@ -70,6 +74,9 @@ hosts:
       dp_iface_gateway: null
       container_type: null
       container_name: null
+
+sadis:
+  file: ${CURDIR}/cb-office-net-sadis.json
 
 web_power_switch:
   ip: '10.76.28.23'

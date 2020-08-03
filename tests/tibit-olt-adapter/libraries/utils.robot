@@ -31,11 +31,13 @@ Resource          ../../../libraries/utils.robot
 
 Preprovision Tibit
     [Documentation]    Pre-test Setup for TibitOLT, but no enable
+    [Arguments]        ${disable_discovery}=False
+
     #test for empty device list
     Test Empty Device List
 
-    Run Keyword If    ${has_dataplane}    Sleep    230s
     #create/preprovision device
+    # TODO: Support passing discovery-disable to device on startup
     ${olt_device_id}=    Create Device Tibit   ${olt_mac}
 
     Set Suite Variable    ${olt_device_id}
@@ -45,34 +47,24 @@ Preprovision Tibit
     ...    Validate OLT Device    PREPROVISIONED    UNKNOWN    UNKNOWN    ${olt_device_id}
 
 Setup Tibit
-    [Documentation]    Pre-test Setup for TibitOLT
-    Preprovision Tibit
+    [Documentation]    Pre-test Setup for TibitOLT.  Non-HA recovery method
+    ...
+    ...                The initial enable (after preprovisioning) on a Tibit should
+    ...                take less than 60 seconds.  The OLT goes through a reboot
+    ...                after first being contacted wich takes ~ 10-15 seconds and
+    ...                after recontact by the device adapter, the current state is
+    ...                pulled down which should only take a couple of seconds
+    ...
+    ...                For HA (container restart/reconciliation), use a different
+    ...                keyword since that will take longer based on what needs to
+    ...                be reconciled in the new device adapter or on the hardware.
+    [Arguments]       ${disable_discovery}=False
 
-    # Enable the device
+    Preprovision Tibit    ${disable_discovery}
+
+    # Enable the device.
     Enable Device    ${olt_device_id}
-    Wait Until Keyword Succeeds    380s    5s
-    ...    Validate OLT Device    ENABLED    ACTIVE    REACHABLE    ${olt_serial_number}
-    ${logical_id}=    Get Logical Device ID From SN    ${olt_serial_number}
-    Set Suite Variable    ${logical_id}
-
-
-Setup Tibit 2
-    [Documentation]    Pre-test Setup for TibitOLT
-    #test for empty device list
-    Test Empty Device List
-
-    Run Keyword If    ${has_dataplane}    Sleep    230s
-    #create/preprovision device
-    ${olt_device_id}=    Create Device Tibit   ${olt_mac}
-
-    Set Suite Variable    ${olt_device_id}
-
-    #validate olt states
-    Wait Until Keyword Succeeds    ${timeout}    5s
-    ...    Validate OLT Device    PREPROVISIONED    UNKNOWN    UNKNOWN    ${olt_device_id}
-    Sleep    5s
-    Enable Device    ${olt_device_id}
-    Wait Until Keyword Succeeds    380s    5s
-    ...    Validate OLT Device    ENABLED    ACTIVE    REACHABLE    ${olt_serial_number}
-    ${logical_id}=    Get Logical Device ID From SN    ${olt_serial_number}
+    Wait Until Keyword Succeeds    60s    5s
+    ...    Validate OLT Device    ENABLED    ACTIVE    REACHABLE    ${olt_device_id}
+    ${logical_id}=    Get Logical Device ID From SN    ${olt_device_id}
     Set Suite Variable    ${logical_id}

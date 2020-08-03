@@ -75,10 +75,10 @@ Reboot Device
 Disable Devices In Voltha
     [Documentation]    Disables all the known devices in voltha
     [Arguments]    ${filter}
-    ${arg}=    Set Variable    ${EMPTY}
-    ${arg}=    Run Keyword If    len('${filter}'.strip()) != 0    Set Variable    --filter ${filter}
+    ${arg}=    Set Variable    Set Variable    --filter 'AdminState!=PREPROVISIONED'
+    ${arg}=    Run Keyword If    len('${filter}'.strip()) != 0    Set Variable    --filter '${filter},AdminState!=PREPROVISIONED'
     ${rc}    ${devices}=    Run and Return Rc and Output
-    ...    ${VOLTCTL_CONFIG}; voltctl device list -m 8MB ${arg} --orderby Root -q | xargs echo -n
+    ...    ${VOLTCTL_CONFIG}; voltctl device list -q -m 8MB ${arg} --orderby Root -q | xargs echo -n
     Should Be Equal As Integers    ${rc}    0
     ${rc}    ${output}=    Run Keyword If    len('${devices}') != 0    Run and Return Rc and Output
     ...    ${VOLTCTL_CONFIG}; voltctl device disable ${devices}
@@ -88,7 +88,7 @@ Test Devices Disabled In Voltha
     [Documentation]    Tests to verify that all devices in VOLTHA are disabled
     [Arguments]    ${filter}
     ${rc}    ${count}=    Run and Return Rc and Output
-    ...    ${VOLTCTL_CONFIG}; voltctl device list -m 8MB --filter '${filter},AdminState!=DISABLED' -q | wc -l
+    ...    ${VOLTCTL_CONFIG}; voltctl device list -m 8MB --filter '${filter},AdminState!=DISABLED,AdminState!=PREPROVISIONED' -q | wc -l
     Should Be Equal As Integers    ${rc}    0
     Should Be Equal As Integers    ${count}    0
 

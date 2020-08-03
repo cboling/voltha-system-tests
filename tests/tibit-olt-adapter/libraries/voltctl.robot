@@ -28,7 +28,8 @@ Resource          ../../../libraries/utils.robot
 *** Keywords ***
 Create Device Tibit
     [Arguments]    ${mac}     ${type}=tibit_olt
-    [Documentation]    Creates a device in VOLTHA
+    [Documentation]    Creates a device in VOLTHA for the Tibit OLT with
+    ...                a MAC Address of ${mac}
     #create/preprovision device
     ${rc}    ${device_id}=    Run and Return Rc and Output
     ...    ${VOLTCTL_CONFIG}; voltctl device create -t ${type} -m ${mac}
