@@ -28,6 +28,7 @@ Resource          ./flows.robot
 *** Keywords ***
 Test Empty Device List
     [Documentation]    Verify that there are no devices in the system
+    Get Device List from Voltha
     ${rc}    ${output}=    Run and Return Rc and Output    ${VOLTCTL_CONFIG}; voltctl device list -o json
     Should Be Equal As Integers    ${rc}    0
     ${jsondata}=    To Json    ${output}
@@ -75,10 +76,12 @@ Reboot Device
 Disable Devices In Voltha
     [Documentation]    Disables all the known devices in voltha
     [Arguments]    ${filter}
+    Get Device List from Voltha
     ${arg}=    Set Variable    Set Variable    --filter 'AdminState!=PREPROVISIONED'
     ${arg}=    Run Keyword If    len('${filter}'.strip()) != 0    Set Variable    --filter '${filter},AdminState!=PREPROVISIONED'
     ${rc}    ${devices}=    Run and Return Rc and Output
     ...    ${VOLTCTL_CONFIG}; voltctl device list -q -m 8MB ${arg} --orderby Root -q | xargs echo -n
+    Log    ${devices}
     Should Be Equal As Integers    ${rc}    0
     ${rc}    ${output}=    Run Keyword If    len('${devices}') != 0    Run and Return Rc and Output
     ...    ${VOLTCTL_CONFIG}; voltctl device disable ${devices}
@@ -87,8 +90,10 @@ Disable Devices In Voltha
 Test Devices Disabled In Voltha
     [Documentation]    Tests to verify that all devices in VOLTHA are disabled
     [Arguments]    ${filter}
+    Get Device List from Voltha
     ${rc}    ${count}=    Run and Return Rc and Output
     ...    ${VOLTCTL_CONFIG}; voltctl device list -m 8MB --filter '${filter},AdminState!=DISABLED,AdminState!=PREPROVISIONED' -q | wc -l
+    Log    ${count}
     Should Be Equal As Integers    ${rc}    0
     Should Be Equal As Integers    ${count}    0
 
@@ -97,8 +102,10 @@ Delete Devices In Voltha
     [Arguments]    ${filter}
     ${arg}=    Set Variable    ${EMPTY}
     ${arg}=    Run Keyword If    len('${filter}'.strip()) != 0    Set Variable    --filter ${filter}
+    Get Device List from Voltha
     ${rc}    ${devices}=    Run and Return Rc and Output
     ...    ${VOLTCTL_CONFIG}; voltctl device list ${arg} -m 8MB --orderby Root -q | xargs echo -n
+    Log    ${devices}
     Should Be Equal As Integers    ${rc}    0
     ${rc}    ${output}=    Run Keyword If    len('${devices}') != 0    Run and Return Rc and Output
     ...    ${VOLTCTL_CONFIG}; voltctl device delete ${devices}

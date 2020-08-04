@@ -82,7 +82,7 @@ OLT Adapter Preprovisioning
 OLT Adapter Can Be Enabled and Deleted
     [Documentation]    Validates the Tibit OLT Device adapter can be enabled
     [Tags]    statetest    tibitolttest
-    [Setup]    Run Keywords    Start Logging    OLTSingleEnableTest
+    [Setup]    Run Keywords    Start Logging    OLTNoOnuEnableTest
     ...    AND    Delete All Devices and Verify
     Run Keyword If    ${has_dataplane}    Clean Up Linux
 
@@ -103,13 +103,13 @@ OLT Adapter Can Be Enabled and Deleted
     # TODO: Verify kv-store is scrubbed of OLT handler specific items
 
     [Teardown]    Run Keywords    Run Keyword If    ${logging}    Collect Logs
-    ...    AND    Stop Logging    OLTSingleEnableTest
+    ...    AND    Stop Logging    OLTNoOnuEnableTest
 
 OLT Adapter Can Be Disabled and Deleted
     [Documentation]    Validates the Tibit OLT Device adapter can be disabled after
     ...                previously being enabled and then deleted
     [Tags]    statetest    tibitolttest
-    [Setup]    Run Keywords    Start Logging    OLTSingleDisableTest
+    [Setup]    Run Keywords    Start Logging    OLTNoOnuDisableTest
     ...    AND    Clear All Devices Then Create New Device
     Run Keyword If    ${has_dataplane}    Clean Up Linux
 
@@ -118,7 +118,7 @@ OLT Adapter Can Be Disabled and Deleted
     Set Global Variable    ${timeStart}
 
     # Disable
-    Disable Device  ${olt_device_id}
+    Disable Device   ${olt_device_id}
 
     # Delete it while disabled
     Delete Device    ${olt_device_id}
@@ -126,12 +126,12 @@ OLT Adapter Can Be Disabled and Deleted
     # TODO: Verify kv-store is scrubbed of OLT handler specific items
 
     [Teardown]    Run Keywords    Run Keyword If    ${logging}    Collect Logs
-    ...    AND    Stop Logging    OLTSingleDisableTest
+    ...    AND    Stop Logging    OLTNoOnuDisableTest
 
 OLT Adapter Cleans up kv-store on Delete
     [Documentation]    Validates after delete of and OLT, kv-store is scrubbed
     [Tags]    statetest    tibitolttest
-    [Setup]    Run Keywords    Start Logging    OLTSingleDeleteTest
+    [Setup]    Run Keywords    Start Logging    OLTNoOnuDeleteTest
     ...    AND    Clear All Devices Then Create New Device
     Run Keyword If    ${has_dataplane}    Clean Up Linux
 
@@ -149,19 +149,84 @@ OLT Adapter Cleans up kv-store on Delete
     # TODO: Verify kv-store is scrubbed of OLT handler specific items
 
     [Teardown]    Run Keywords    Run Keyword If    ${logging}    Collect Logs
-    ...    AND    Stop Logging    OLTSingleDeleteTest
+    ...    AND    Stop Logging    OLTNoOnuDeleteTest
+
+OLT Adapter Soft Reboot while Enabled
+    [Documentation]    An OLT can be rebooted while it is enabled
+    [Tags]    statetest    tibitolttest
+    [Setup]    Run Keywords    Start Logging    OLTNoOnuRebootEnabledTest
+    ...    AND    Clear All Devices Then Create New Device
+    Run Keyword If    ${has_dataplane}    Clean Up Linux
+
+    # Start test
+    ${timeStart} =    Get Current Date
+    Set Global Variable    ${timeStart}
+
+    # Reboot the OLT using "voltctl device reboot" command
+    Reboot Device    ${olt_device_id}
+
+    #  TODO: On OLT reset, SQA flags are reset right after the command is sent, since
+    #        we are in the No-ONU state, disable discovery so we do not search for ONUs
+    #        once we come back up and enable.
+
+    # Tibit OLT reboots within 8-10 seconds:
+    #  TODO: the NNI port will move to OperState Unknown
+    #  TODO: PON port is left alone, have it go to OperState UNKNOWN as well
+    #  TODO: the OLT OperState goes to UNKNOWN, and connect status to Unreachable
+    Sleep  15s      # For now, pause long enough for reboot
+
+    # Will need to finish re-enable, so give it another 15 seconds
+    Wait Until Keyword Succeeds    15    5s    Validate OLT Device    ENABLED    ACTIVE    REACHABLE
+    ...    ${olt_serial_number}
+
+    [Teardown]    Run Keywords    Run Keyword If    ${logging}    Collect Logs
+    ...    AND    Stop Logging    OLTNoOnuRebootEnabledTest
+
+
+OLT Adapter Soft Reboot while Disabled
+    [Documentation]    An OLT can be rebooted while it is enabled
+    [Tags]    statetest    tibitolttest
+    [Setup]    Run Keywords    Start Logging    OLTNoOnuRebootDisabledTest
+    ...    AND    Clear All Devices Then Create New Device
+    Run Keyword If    ${has_dataplane}    Clean Up Linux
+
+    # Start test
+    ${timeStart} =    Get Current Date
+    Set Global Variable    ${timeStart}
+
+    # Disable
+    Disable Device   ${olt_device_id}
+
+    # Reboot the OLT using "voltctl device reboot" command
+    Reboot Device    ${olt_device_id}
+
+    #  TODO: On OLT reset, SQA flags are reset right after the command is sent, since
+    #        we are in the No-ONU state, disable discovery so we do not search for ONUs
+    #        once we come back up and enable.
+
+    # Tibit OLT reboots within 8-10 seconds:
+    #  TODO: the OLT OperState goes to UNKNOWN, and connect status to Unreachable
+    #        which may be the state before.*** Test Cases ***
+    #  TODO: Some REST accessible stats of commands (reboots, enables, disables, ...) would
+    #        be useful.
+    Sleep  15s      # For now, pause long enough for reboot
+
+    # Will need to finish re-enable, so give it another 15 seconds
+    Wait Until Keyword Succeeds    15    5s    Validate OLT Device    DISABLED    UNKNOWN    UNREACHABLE
+    ...    ${olt_serial_number}
+
+    [Teardown]    Run Keywords    Run Keyword If    ${logging}    Collect Logs
+    ...    AND    Stop Logging    OLTNoOnuRebootDisabledTest
 
 # TODO: A list of future tests to try (with no onus)
-#
-#  - Reboot while enabled
-#  - Reboot while disabled
+#  - Disable the olt right after we first enable it and it is doing it's initial startup
 #  - Reboot while enabled, but disable before reboot completes
 #  - Reboot while disabled, but enable before reboot completes
 #  - Reboot while enabled, but delete before reboot completes
 #  - Reboot while disabled, but delete before reboot completes
 #  - PON Port Disable/Enable while enabled
 #  - PON Port Disable/Enable while disabled
-#  - PON Port Disable  - Repeat 6 reboot tests above with PON port disbled
+#  - PON Port Disable  - Repeat 6 reboot tests above with PON port disabled
 #
 #################
 # TODO: In a separate failures suite for NO ONUs, *** test cases ***
