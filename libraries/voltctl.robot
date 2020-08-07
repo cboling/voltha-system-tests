@@ -92,7 +92,7 @@ Test Devices Disabled In Voltha
     [Arguments]    ${filter}
     Get Device List from Voltha
     ${rc}    ${count}=    Run and Return Rc and Output
-    ...    ${VOLTCTL_CONFIG}; voltctl device list -m 8MB --filter '${filter},AdminState!=DISABLED,AdminState!=PREPROVISIONED' -q | wc -l
+    ...    ${VOLTCTL_CONFIG}; voltctl device list -m 8MB --filter '${filter},AdminState!=DISABLED' -q | grep -v PREPROVISIONED | wc -l
     Log    ${count}
     Should Be Equal As Integers    ${rc}    0
     Should Be Equal As Integers    ${count}    0
