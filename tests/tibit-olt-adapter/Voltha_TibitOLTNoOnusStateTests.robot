@@ -195,13 +195,13 @@ OLT Adapter Soft Reboot while Disabled
     Set Global Variable    ${timeStart}
 
     # TODO: For now, pause 15 seconds for clean enable startup
-    Sleep   15s
+    # Sleep   15s
 
     # Disable
     Disable Device   ${olt_device_id}
 
     # TODO: For now, pause 5 seconds for clean disabling
-    Sleep   5s
+    # Sleep   5s
 
     # Reboot the OLT using "voltctl device reboot" command
     Reboot Device    ${olt_device_id}
