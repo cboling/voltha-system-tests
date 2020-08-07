@@ -194,8 +194,14 @@ OLT Adapter Soft Reboot while Disabled
     ${timeStart} =    Get Current Date
     Set Global Variable    ${timeStart}
 
+    # TODO: For now, pause 15 seconds for clean enable startup
+    Sleep   15s
+
     # Disable
     Disable Device   ${olt_device_id}
+
+    # TODO: For now, pause 5 seconds for clean disabling
+    Sleep   5s
 
     # Reboot the OLT using "voltctl device reboot" command
     Reboot Device    ${olt_device_id}
@@ -227,6 +233,16 @@ OLT Adapter Soft Reboot while Disabled
 #  - PON Port Disable/Enable while enabled
 #  - PON Port Disable/Enable while disabled
 #  - PON Port Disable  - Repeat 6 reboot tests above with PON port disabled
+#
+#  - Disable-enable, enable-disable, disable-reboot, reboot-disable, and so on
+#    with very little or not time between them, say 0 to 5 seconds in .25 second
+#    increments.  Goal is to make sure functions getting canceled/started/restarted
+#    occur properly.  For instance, during enable, if off waiting on an async call
+#    to finish we get a disable request, that request should be canceled and we stop
+#    doing any more enabling, but instead, let disable proceed as it should.   This
+#    should first be with no ONUs so we can really get that logic solid.  Once ONUs
+#    and flows are added and become more numerous, may want to do this with those
+#    setups and with a longer max time than 5 seconds...
 #
 #################
 # TODO: In a separate failures suite for NO ONUs, *** test cases ***
