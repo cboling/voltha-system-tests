@@ -95,8 +95,12 @@ OLT Adapter Can Be Enabled and Deleted
     Setup Tibit    ${disable_discovery}
 
     # TODO: Run through a few of the kv-store items (ResourceMgr, Logging, ...)
-    #       and make sure there is something in the KV-store
-
+    #       and make sure there is something in the KV-store.  REST call to check
+    #       various subsystem states are fully running would be good to perform.
+    #
+    # TODO: Move a subset of the REST checks into our own 'Create New Device' *** keywords ***
+    #       so that all tests that need to run on a fully enabled and running OLT can do so
+    #
     # Delete it
     Delete Device    ${olt_device_id}
 
@@ -113,12 +117,21 @@ OLT Adapter Can Be Disabled and Deleted
     ...    AND    Clear All Devices Then Create New Device
     Run Keyword If    ${has_dataplane}    Clean Up Linux
 
+    # TODO: Run through a few of the kv-store items (ResourceMgr, Logging, ...)
+    #       and make sure there is something in the KV-store.  REST call to check
+    #       various subsystem states are fully running would be good to perform.
+    #
+    # TODO: Move a subset of the REST checks into our own 'Create New Device' *** keywords ***
+    #       so that all tests that need to run on a fully enabled and running OLT can do so
+    #
     # Start test
     ${timeStart} =    Get Current Date
     Set Global Variable    ${timeStart}
 
     # Disable
     Disable Device   ${olt_device_id}
+    Wait Until Keyword Succeeds    3    5s    Validate OLT Device    DISABLED    UNKNOWN    REACHABLE
+    ...    ${olt_device_id}
 
     # Delete it while disabled
     Delete Device    ${olt_device_id}
@@ -141,7 +154,7 @@ OLT Adapter Cleans up kv-store on Delete
 
     # Let it run for a little bit so that most all processes have done
     # something by now
-    Sleep     60s
+    Sleep     40s
 
     # Delete it
     Delete Device    ${olt_device_id}
@@ -152,11 +165,15 @@ OLT Adapter Cleans up kv-store on Delete
     ...    AND    Stop Logging    OLTNoOnuDeleteTest
 
 OLT Adapter Soft Reboot while Enabled
-    [Documentation]    An OLT can be rebooted while it is enabled
+    [Documentation]    An OLT can be rebooted while it is enabled.
     [Tags]    statetest    tibitolttest
     [Setup]    Run Keywords    Start Logging    OLTNoOnuRebootEnabledTest
     ...    AND    Clear All Devices Then Create New Device
     Run Keyword If    ${has_dataplane}    Clean Up Linux
+
+    # TODO: Move a subset of the REST checks into our own 'Create New Device' *** keywords ***
+    #       so that all tests that need to run on a fully enabled and running OLT can do so
+    Sleep   30s       # For now, just do a time delay
 
     # Start test
     ${timeStart} =    Get Current Date
@@ -164,6 +181,9 @@ OLT Adapter Soft Reboot while Enabled
 
     # Reboot the OLT using "voltctl device reboot" command
     Reboot Device    ${olt_device_id}
+    Sleep    2s
+    Wait Until Keyword Succeeds    2    2s    Validate OLT Device    ENABLED    UNKNOWN    UNREACHABLE
+    ...    ${olt_device_id}
 
     #  TODO: On OLT reset, SQA flags are reset right after the command is sent, since
     #        we are in the No-ONU state, disable discovery so we do not search for ONUs
@@ -173,15 +193,14 @@ OLT Adapter Soft Reboot while Enabled
     #  TODO: the NNI port will move to OperState Unknown
     #  TODO: PON port is left alone, have it go to OperState UNKNOWN as well
     #  TODO: the OLT OperState goes to UNKNOWN, and connect status to Unreachable
-    Sleep  15s      # For now, pause long enough for reboot
+    Sleep   15s      # For now, pause long enough for reboot
 
-    # Will need to finish re-enable, so give it another 15 seconds
-    Wait Until Keyword Succeeds    15    5s    Validate OLT Device    ENABLED    ACTIVE    REACHABLE
-    ...    ${olt_serial_number}
+    # Will need to finish re-enable, so give it another 60 seconds since it will need to run an audit
+    Wait Until Keyword Succeeds    10    6s    Validate OLT Device    ENABLED    ACTIVE    REACHABLE
+    ...    ${olt_device_id}
 
     [Teardown]    Run Keywords    Run Keyword If    ${logging}    Collect Logs
     ...    AND    Stop Logging    OLTNoOnuRebootEnabledTest
-
 
 OLT Adapter Soft Reboot while Disabled
     [Documentation]    An OLT can be rebooted while it is enabled
@@ -190,21 +209,24 @@ OLT Adapter Soft Reboot while Disabled
     ...    AND    Clear All Devices Then Create New Device
     Run Keyword If    ${has_dataplane}    Clean Up Linux
 
+    # TODO: Move a subset of the REST checks into our own 'Create New Device' *** keywords ***
+    #       so that all tests that need to run on a fully enabled and running OLT can do so
+    Sleep   30s       # For now, just do a time delay
+
     # Start test
     ${timeStart} =    Get Current Date
     Set Global Variable    ${timeStart}
 
-    # TODO: For now, pause 15 seconds for clean enable startup
-    # Sleep   15s
-
     # Disable
     Disable Device   ${olt_device_id}
-
-    # TODO: For now, pause 5 seconds for clean disabling
-    # Sleep   5s
+    Wait Until Keyword Succeeds    3    5s    Validate OLT Device    DISABLED    UNKNOWN    REACHABLE
+    ...    ${olt_device_id}
 
     # Reboot the OLT using "voltctl device reboot" command
     Reboot Device    ${olt_device_id}
+    Sleep    2s
+    Wait Until Keyword Succeeds    2    2s    Validate OLT Device    DISABLED    UNKNOWN    UNREACHABLE
+    ...    ${olt_device_id}
 
     #  TODO: On OLT reset, SQA flags are reset right after the command is sent, since
     #        we are in the No-ONU state, disable discovery so we do not search for ONUs
@@ -217,19 +239,159 @@ OLT Adapter Soft Reboot while Disabled
     #        be useful.
     Sleep  15s      # For now, pause long enough for reboot
 
-    # Will need to finish re-enable, so give it another 15 seconds
-    Wait Until Keyword Succeeds    15    5s    Validate OLT Device    DISABLED    UNKNOWN    UNREACHABLE
-    ...    ${olt_serial_number}
+    # Will need to finish re-enable, so give it another 30 seconds
+    Wait Until Keyword Succeeds    10    3s    Validate OLT Device    DISABLED    UNKNOWN    REACHABLE
+    ...    ${olt_device_id}
 
     [Teardown]    Run Keywords    Run Keyword If    ${logging}    Collect Logs
     ...    AND    Stop Logging    OLTNoOnuRebootDisabledTest
 
+OLT Adapter Disable During Soft Reboot
+    [Documentation]    Reboot while enabled, but disable before reboot completes
+    [Tags]    statetest    tibitolttest
+    [Setup]    Run Keywords    Start Logging    OLTNoOnuDisableDuringRebootTest
+    ...    AND    Clear All Devices Then Create New Device
+    Run Keyword If    ${has_dataplane}    Clean Up Linux
+
+    # TODO: Move a subset of the REST checks into our own 'Create New Device' *** keywords ***
+    #       so that all tests that need to run on a fully enabled and running OLT can do so
+    Sleep  30s       # For now, just do a time delay
+
+    # Start test
+    ${timeStart} =    Get Current Date
+    Set Global Variable    ${timeStart}
+
+    # Reboot the OLT using "voltctl device reboot" command
+    Reboot Device    ${olt_device_id}
+    Sleep    2s
+    Wait Until Keyword Succeeds    2    2s    Validate OLT Device    ENABLED    UNKNOWN    UNREACHABLE
+    ...    ${olt_device_id}
+
+    # Disable while reboot is in progress
+    Disable Device   ${olt_device_id}
+
+    #  TODO: On OLT reset, SQA flags are reset right after the command is sent, since
+    #        we are in the No-ONU state, disable discovery so we do not search for ONUs
+    #        once we come back up and enable.
+    # For now, pause long enough for reboot to complete
+    Sleep  15s
+
+    # Did it come back up as Disabled?  Give it 30 seconds
+    Wait Until Keyword Succeeds    10    4s    Validate OLT Device    DISABLED    UNKNOWN    REACHABLE
+    ...    ${olt_device_id}
+
+    [Teardown]    Run Keywords    Run Keyword If    ${logging}    Collect Logs
+    ...    AND    Stop Logging    OLTNoOnuDisableDuringRebootTest
+
+OLT Adapter Enable During Soft Reboot
+    [Documentation]    Reboot while disabled, but enable before reboot completes
+    [Tags]    statetest    tibitolttest
+    [Setup]    Run Keywords    Start Logging    OLTNoOnuEnableDuringRebootTest
+    ...    AND    Clear All Devices Then Create New Device
+    Run Keyword If    ${has_dataplane}    Clean Up Linux
+
+    # TODO: Move a subset of the REST checks into our own 'Create New Device' *** keywords ***
+    #       so that all tests that need to run on a fully enabled and running OLT can do so
+    Sleep   30s       # For now, just do a time delay
+
+    # Start test
+    ${timeStart} =    Get Current Date
+    Set Global Variable    ${timeStart}
+
+    # Disable
+    Disable Device   ${olt_device_id}
+    Wait Until Keyword Succeeds    3    3s    Validate OLT Device    DISABLED    UNKNOWN    REACHABLE
+    ...    ${olt_device_id}
+
+    # Reboot the OLT using "voltctl device reboot" command
+    Reboot Device    ${olt_device_id}
+    Sleep    2s
+    Wait Until Keyword Succeeds    2    2s    Validate OLT Device    DISABLED    UNKNOWN    UNREACHABLE
+    ...    ${olt_device_id}
+
+    # Enable while reboot is in progress
+    Enable Device   ${olt_device_id}
+
+    #  TODO: On OLT reset, SQA flags are reset right after the command is sent, since
+    #        we are in the No-ONU state, disable discovery so we do not search for ONUs
+    #        once we come back up and enable.
+    # For now, pause long enough for reboot to complete
+    Sleep  15s
+
+    # Did it come back up as enabled?  Give it 60 seconds since it will need to run an audit
+    Wait Until Keyword Succeeds    10    6s    Validate OLT Device    ENABLED    ACTIVE    REACHABLE
+    ...    ${olt_device_id}
+
+    [Teardown]    Run Keywords    Run Keyword If    ${logging}    Collect Logs
+    ...    AND    Stop Logging    OLTNoOnuEnableDuringRebootTest
+
+
+OLT Adapter Delete During Soft Reboot while Enabled
+    [Documentation]    Reboot while enabled, but delete before reboot completes
+    [Tags]    statetest    tibitolttest
+    [Setup]    Run Keywords    Start Logging    OLTNoOnuDeleteDuringEnabledReboot
+    ...    AND    Clear All Devices Then Create New Device
+    Run Keyword If    ${has_dataplane}    Clean Up Linux
+
+    # TODO: Move a subset of the REST checks into our own 'Create New Device' *** keywords ***
+    #       so that all tests that need to run on a fully enabled and running OLT can do so
+    Sleep   30s       # For now, just do a time delay
+
+    # Start test
+    ${timeStart} =    Get Current Date
+    Set Global Variable    ${timeStart}
+
+    # Reboot the OLT using "voltctl device reboot" command
+    Reboot Device    ${olt_device_id}
+    Sleep    2s
+    Wait Until Keyword Succeeds    2    2s    Validate OLT Device    ENABLED    UNKNOWN    UNREACHABLE
+    ...    ${olt_device_id}
+
+    # Delete it while it is rebooting
+    Delete Device    ${olt_device_id}
+
+    # TODO: Verify kv-store is scrubbed of OLT handler specific items
+
+    [Teardown]    Run Keywords    Run Keyword If    ${logging}    Collect Logs
+    ...    AND    Stop Logging    OLTNoOnuDeleteDuringEnabledReboot
+
+
+OLT Adapter Delete During Soft Reboot while Disabled
+    [Documentation]    Reboot while disabled, but delete before reboot completes
+    [Tags]    statetest    tibitolttest
+    [Setup]    Run Keywords    Start Logging    OLTNoOnuDeleteDuringDisabledReboot
+    ...    AND    Clear All Devices Then Create New Device
+    Run Keyword If    ${has_dataplane}    Clean Up Linux
+
+    # TODO: Move a subset of the REST checks into our own 'Create New Device' *** keywords ***
+    #       so that all tests that need to run on a fully enabled and running OLT can do so
+    Sleep   30s       # For now, just do a time delay
+
+    # Start test
+    ${timeStart} =    Get Current Date
+    Set Global Variable    ${timeStart}
+
+    # Disable
+    Disable Device   ${olt_device_id}
+    Wait Until Keyword Succeeds    3    5s    Validate OLT Device    DISABLED    UNKNOWN    REACHABLE
+    ...    ${olt_device_id}
+
+    # Reboot the OLT using "voltctl device reboot" command
+    Reboot Device    ${olt_device_id}
+    Sleep    2s
+    Wait Until Keyword Succeeds    2    2s    Validate OLT Device    DISABLED    UNKNOWN    UNREACHABLE
+    ...    ${olt_device_id}
+
+    # Delete it while it is rebooting
+    Delete Device    ${olt_device_id}
+
+    # TODO: Verify kv-store is scrubbed of OLT handler specific items
+
+    [Teardown]    Run Keywords    Run Keyword If    ${logging}    Collect Logs
+    ...    AND    Stop Logging    OLTNoOnuDeleteDuringDisabledReboot
+
+
 # TODO: A list of future tests to try (with no onus)
-#  - Disable the olt right after we first enable it and it is doing it's initial startup
-#  - Reboot while enabled, but disable before reboot completes
-#  - Reboot while disabled, but enable before reboot completes
-#  - Reboot while enabled, but delete before reboot completes
-#  - Reboot while disabled, but delete before reboot completes
 #  - PON Port Disable/Enable while enabled
 #  - PON Port Disable/Enable while disabled
 #  - PON Port Disable  - Repeat 6 reboot tests above with PON port disabled
