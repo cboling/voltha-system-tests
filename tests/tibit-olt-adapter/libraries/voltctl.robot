@@ -35,3 +35,47 @@ Create Device Tibit
     ...    ${VOLTCTL_CONFIG}; voltctl device create -t ${type} -m ${mac}
     Should Be Equal As Integers    ${rc}    0
     [Return]    ${device_id}
+
+
+Get OLT Ports
+    [Documentation]    Parses the output of voltctl device port list ${olt_device_id} and matches the port types listed
+    [Arguments]    ${device_id}   ${port_type}
+    # Get the port numbers that match the port type
+    ${rc}    ${results}=    Run and Return Rc and Output
+    ...    ${VOLTCTL_CONFIG}; voltctl device port list ${device_id} --filter='Type=${port_type}' -m 8MB --format='{{.PortNo}}' -q
+    Log    ${results}
+    Should Be Equal As Integers    ${rc}    0
+
+    Return from Keyword if  isinstance($results, list)   ${results}
+
+    ${list_result}=    Create List
+    Append To List        ${list_result}    ${results}
+    Return From Keyword   ${list_result}
+
+
+Validate Port Admin Status
+    [Documentation]    Verifies the admin status of a specific port on an OLT device
+    [Arguments]    ${device_id}   ${port_number}   ${admin_status}
+
+    ${rc}    ${results}=    Run and Return Rc and Output
+    ...    ${VOLTCTL_CONFIG}; voltctl device port list ${device_id} --filter='PortNo=${port_number}' -q --format='{{.AdminState}}'
+    Log    ${results}
+    Should Be Equal As Integers    ${rc}    0
+    [Return]    ${results} == ${admin_status}
+
+
+Disable Port
+    [Documentation]    Disable a port on the OLT
+    [Arguments]    ${device_id}   ${port_number}
+    ${rc}    ${port_numbers}=    Run and Return Rc and Output
+    ...    ${VOLTCTL_CONFIG}; voltctl device port disable ${device_id} ${port_number}
+    Should Be Equal As Integers    ${rc}    0
+
+
+Enable Port
+    [Documentation]    Enable a port on the OLT
+    [Arguments]    ${device_id}   ${port_number}
+    ${rc}    ${port_numbers}=    Run and Return Rc and Output
+    ...    ${VOLTCTL_CONFIG}; voltctl device port enable ${device_id} ${port_number}
+    Should Be Equal As Integers    ${rc}    0
+
