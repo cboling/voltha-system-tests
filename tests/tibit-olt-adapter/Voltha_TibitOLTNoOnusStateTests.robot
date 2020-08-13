@@ -57,6 +57,14 @@ ${debugmode}            False
 ${logging}              False
 ${pausebeforecleanup}   False
 
+# Timeouts so they are consistent. These are times without ONUs or flows present
+${enable_timeout}       15s     # OLT disable time to competion
+${disable_timeout}      15s     # OLT disable time to competion
+${reboot_window}         8s     # Time between reboot request and OLT finishing reboot
+${reboot_pause}         15s     # Wait before we start checking
+${reboot_timeout}       30s     # Reboot completed and back fully into enabled/disabled state
+${port_timeout}         15s     # Enable/disable port time to completion
+
 *** Test Cases ***
 
 OLT Adapter Preprovisioning
@@ -139,13 +147,14 @@ OLT Adapter Can Be Disabled and Deleted
     ${timeStart} =    Get Current Date
     Set Global Variable    ${timeStart}
 
-    # Disable
+    # Disable (note device is still reachable in 'disabled' state
     Disable Device   ${olt_device_id}
-    Wait Until Keyword Succeeds    3    5s    Validate OLT Device    DISABLED    UNKNOWN    REACHABLE
+    Wait Until Keyword Succeeds   ${disable_timeout}   5s  Validate OLT Device  DISABLED  UNKNOWN  REACHABLE
     ...    ${olt_device_id}
 
     # TODO: Validate device port states.   OperStatus = UNKNOWN (close enough to INACTIVE)
-    # TODO: After TBVOL-128 implemented, validate PON laser is still ON after an OLT disable
+    # TODO: Validate PON laser is still ON after an OLT disable
+    # TODO: Validate that the OLT heartbeat is still operational and running
 
     # Delete it while disabled
     Delete Device    ${olt_device_id}
@@ -195,8 +204,8 @@ OLT Adapter Soft Reboot while Enabled
 
     # Reboot the OLT using "voltctl device reboot" command
     Reboot Device    ${olt_device_id}
-    Sleep    2s
-    Wait Until Keyword Succeeds    2    2s    Validate OLT Device    ENABLED    UNKNOWN    UNREACHABLE
+    Sleep    1s
+    Wait Until Keyword Succeeds   ${reboot_window}   2s    Validate OLT Device   ENABLED  UNKNOWN  UNREACHABLE
     ...    ${olt_device_id}
 
     # TODO: Validate device port states changed as well 'during' reboot.
@@ -211,10 +220,10 @@ OLT Adapter Soft Reboot while Enabled
     #  TODO: the NNI port will move to OperState Unknown
     #  TODO: PON port is left alone, have it go to OperState UNKNOWN as well
     #  TODO: the OLT OperState goes to UNKNOWN, and connect status to Unreachable
-    Sleep   15s      # For now, pause long enough for reboot
+    Sleep   ${reboot_pause}      # For now, pause long enough for reboot
 
-    # Will need to finish re-enable, so give it another 60 seconds since it will need to run an audit
-    Wait Until Keyword Succeeds    10    6s    Validate OLT Device    ENABLED    ACTIVE    REACHABLE
+    # Will need to finish re-enable
+    Wait Until Keyword Succeeds  ${reboot_timeout}   5s    Validate OLT Device   ENABLED  ACTIVE  REACHABLE
     ...    ${olt_device_id}
 
     # TODO: Validate device port states changed back to their ACTIVE states
@@ -239,13 +248,13 @@ OLT Adapter Soft Reboot while Disabled
 
     # Disable
     Disable Device   ${olt_device_id}
-    Wait Until Keyword Succeeds    3    5s    Validate OLT Device    DISABLED    UNKNOWN    REACHABLE
+    Wait Until Keyword Succeeds   ${disable_timeout}  5s   Validate OLT Device   DISABLED  UNKNOWN  REACHABLE
     ...    ${olt_device_id}
 
     # Reboot the OLT using "voltctl device reboot" command
     Reboot Device    ${olt_device_id}
-    Sleep    2s
-    Wait Until Keyword Succeeds    2    2s    Validate OLT Device    DISABLED    UNKNOWN    UNREACHABLE
+    Sleep    1s
+    Wait Until Keyword Succeeds   ${reboot_window}   2s    Validate OLT Device   DISABLED  UNKNOWN  UNREACHABLE
     ...    ${olt_device_id}
 
     # TODO: Validate device port states remained in their inactive (UNKNOWN) state
@@ -259,10 +268,10 @@ OLT Adapter Soft Reboot while Disabled
     #        which may be the state before.*** Test Cases ***
     #  TODO: Some REST accessible stats of commands (reboots, enables, disables, ...) would
     #        be useful.
-    Sleep  15s      # For now, pause long enough for reboot
+    Sleep  ${reboot_pause}      # For now, pause long enough for reboot
 
-    # Will need to finish re-enable, so give it another 30 seconds
-    Wait Until Keyword Succeeds    10    3s    Validate OLT Device    DISABLED    UNKNOWN    REACHABLE
+    # Will need to finish re-enable
+    Wait Until Keyword Succeeds    ${reboot_timeout}   5s    Validate OLT Device    DISABLED  UNKNOWN  REACHABLE
     ...    ${olt_device_id}
     # TODO: Validate device port states remained in their inactive (UNKNOWN) state
 
@@ -286,8 +295,8 @@ OLT Adapter Disable During Soft Reboot
 
     # Reboot the OLT using "voltctl device reboot" command
     Reboot Device    ${olt_device_id}
-    Sleep    2s
-    Wait Until Keyword Succeeds    2    2s    Validate OLT Device    ENABLED    UNKNOWN    UNREACHABLE
+    Sleep    1s
+    Wait Until Keyword Succeeds   ${reboot_window}   2s   Validate OLT Device   ENABLED  UNKNOWN  UNREACHABLE
     ...    ${olt_device_id}
 
     # Disable while reboot is in progress
@@ -297,10 +306,10 @@ OLT Adapter Disable During Soft Reboot
     #        we are in the No-ONU state, disable discovery so we do not search for ONUs
     #        once we come back up and enable.
     # For now, pause long enough for reboot to complete
-    Sleep  15s
+    Sleep  ${reboot_pause}
 
-    # Did it come back up as Disabled?  Give it 30 seconds
-    Wait Until Keyword Succeeds    10    4s    Validate OLT Device    DISABLED    UNKNOWN    REACHABLE
+    # Did it come back up as Disabled?
+    Wait Until Keyword Succeeds   ${reboot_timeout}   5s   Validate OLT Device   DISABLED  UNKNOWN  REACHABLE
     ...    ${olt_device_id}
     # TODO: Validate device port states remained in their inactive (UNKNOWN) state
 
@@ -324,13 +333,13 @@ OLT Adapter Enable During Soft Reboot
 
     # Disable
     Disable Device   ${olt_device_id}
-    Wait Until Keyword Succeeds    3    3s    Validate OLT Device    DISABLED    UNKNOWN    REACHABLE
+    Wait Until Keyword Succeeds   ${disable_timeout}  5s   Validate OLT Device   DISABLED  UNKNOWN  REACHABLE
     ...    ${olt_device_id}
 
     # Reboot the OLT using "voltctl device reboot" command
     Reboot Device    ${olt_device_id}
-    Sleep    2s
-    Wait Until Keyword Succeeds    2    2s    Validate OLT Device    DISABLED    UNKNOWN    UNREACHABLE
+    Sleep    1s
+    Wait Until Keyword Succeeds   ${reboot_window}   2s   Validate OLT Device   DISABLED  UNKNOWN  UNREACHABLE
     ...    ${olt_device_id}
 
     # Enable while reboot is in progress
@@ -340,10 +349,10 @@ OLT Adapter Enable During Soft Reboot
     #        we are in the No-ONU state, disable discovery so we do not search for ONUs
     #        once we come back up and enable.
     # For now, pause long enough for reboot to complete
-    Sleep  15s
+    Sleep  ${reboot_pause}
 
-    # Did the OLT (and ports) come back up as enabled?  Give it 60 seconds since it will need to run an audit
-    Wait Until Keyword Succeeds    10    6s    Validate OLT Device    ENABLED    ACTIVE    REACHABLE
+    # Did the OLT (and ports) come back up as enabled?
+    Wait Until Keyword Succeeds   ${reboot_timeout}  5s    Validate OLT Device  ENABLED  ACTIVE  REACHABLE
     ...    ${olt_device_id}
     # TODO: Validate device port states recovered to their ACTIVE states here
 
@@ -367,8 +376,8 @@ OLT Adapter Delete During Soft Reboot while Enabled
 
     # Reboot the OLT using "voltctl device reboot" command
     Reboot Device    ${olt_device_id}
-    Sleep    2s
-    Wait Until Keyword Succeeds    2    2s    Validate OLT Device    ENABLED    UNKNOWN    UNREACHABLE
+    Sleep    1s
+    Wait Until Keyword Succeeds   ${reboot_window}   2s   Validate OLT Device   ENABLED  UNKNOWN  UNREACHABLE
     ...    ${olt_device_id}
 
     # Delete it while it is rebooting
@@ -396,13 +405,13 @@ OLT Adapter Delete During Soft Reboot while Disabled
 
     # Disable
     Disable Device   ${olt_device_id}
-    Wait Until Keyword Succeeds    3    5s    Validate OLT Device    DISABLED    UNKNOWN    REACHABLE
+    Wait Until Keyword Succeeds  ${disable_timeout}  5s   Validate OLT Device   DISABLED  UNKNOWN  REACHABLE
     ...    ${olt_device_id}
 
     # Reboot the OLT using "voltctl device reboot" command
     Reboot Device    ${olt_device_id}
-    Sleep    2s
-    Wait Until Keyword Succeeds    2    2s    Validate OLT Device    DISABLED    UNKNOWN    UNREACHABLE
+    Sleep    1s
+    Wait Until Keyword Succeeds   ${reboot_window}   2s   Validate OLT Device   DISABLED  UNKNOWN  UNREACHABLE
     ...    ${olt_device_id}
 
     # Delete it while it is rebooting
@@ -414,7 +423,8 @@ OLT Adapter Delete During Soft Reboot while Disabled
     ...    AND    Stop Logging    OLTNoOnuDeleteDuringDisabledReboot
 
 OLT Adapter PON Port Disable and Enable
-    [Documentation]    Verify that the PON Port(s) can be enabled and disabled
+    [Documentation]    Verify that the PON Port(s) can be enabled and disabled. THe
+    ...                PON optics are independent of the OLT state.
     [Tags]    statetest    tibitolttest
     [Setup]    Run Keywords    Start Logging    OLTNoOnuPonPortEnableDisable
     ...    AND    Clear All Devices Then Create New Device
@@ -431,48 +441,49 @@ OLT Adapter PON Port Disable and Enable
     ${port_numbers}=  Get OLT Ports  ${olt_device_id}   PON_OLT
     FOR    ${port_number}    IN    @{port_numbers}
         # Should be enabled by default
-        Wait Until Keyword Succeeds  1  2s   Validate Port Admin Status
+        Wait Until Keyword Succeeds  10s  2s   Validate Port Admin Status
         ...    ${olt_device_id}   ${port_number}    ENABLED
 
         # TODO: For tibit, validate PON laser is on by default when OLT is first enabled
 
         # Disable the port
         Disable Port   ${olt_device_id}   ${port_number}
-        Wait Until Keyword Succeeds  3  5s   Validate Port Admin Status
+        Wait Until Keyword Succeeds  ${port_timeout}  5s   Validate Port Admin Status
         ...    ${olt_device_id}   ${port_number}    DISABLED
 
         # TODO: For tibit, validate PON laser is turned off
 
         # Enable the port
         Enable Port   ${olt_device_id}   ${port_number}
-        Wait Until Keyword Succeeds  3  5s   Validate Port Admin Status
+        Wait Until Keyword Succeeds  ${port_timeout}   5s   Validate Port Admin Status
         ...    ${olt_device_id}   ${port_number}    ENABLED
 
         # TODO: For tibit, validate PON laser is turned back on
     END
-    #  Do the same with the device disabled
-    # Disable
+
+    # Do the same with the OLT device disabled
     Disable Device   ${olt_device_id}
-    Wait Until Keyword Succeeds    3    5s    Validate OLT Device    DISABLED    UNKNOWN    REACHABLE
+    Wait Until Keyword Succeeds   ${disable_timeout}  5s    Validate OLT Device  DISABLED  UNKNOWN  REACHABLE
     ...    ${olt_device_id}
 
     ${port_numbers}=  Get OLT Ports  ${olt_device_id}   PON_OLT
     FOR    ${port_number}    IN    @{port_numbers}
-        # Should be disabled whenever the OLT is disabled
-        Wait Until Keyword Succeeds  1  2s   Validate Port Admin Status
-        ...    ${olt_device_id}   ${port_number}    DISABLED
+        # Should be not be disabled initially just because the OLT was disabled
+        Wait Until Keyword Succeeds   10s  2s   Validate Port Admin Status
+        ...    ${olt_device_id}   ${port_number}    ENABLED
+        # TODO: For tibit, validate PON laser is still on
 
-        # Disable the port
+        # Disable the port, which should turn off the optics
         Disable Port   ${olt_device_id}   ${port_number}
-        Wait Until Keyword Succeeds  3  5s   Validate Port Admin Status
+        Wait Until Keyword Succeeds   ${port_timeout}   5s   Validate Port Admin Status
         ...    ${olt_device_id}   ${port_number}    DISABLED
 
         # TODO: For tibit, validate PON laser is turned off
 
-        # Enable the port (while OLT is still disabled)
+        # Enable the port (while OLT is still disabled) and optics should be back on
         Enable Port   ${olt_device_id}   ${port_number}
-        Wait Until Keyword Succeeds  3  5s   Validate Port Admin Status
-        ...    ${olt_device_id}   ${port_number}    DISABLED
+        Wait Until Keyword Succeeds   ${port_timeout}   5s   Validate Port Admin Status
+        ...    ${olt_device_id}   ${port_number}    ENABLED
 
         # TODO: For tibit, validate PON laser is turned back on
     END
@@ -480,73 +491,82 @@ OLT Adapter PON Port Disable and Enable
     [Teardown]    Run Keywords    Run Keyword If    ${logging}    Collect Logs
     ...    AND    Stop Logging    OLTNoOnuPonPortEnableDisable
 
-#OLT Adapter PON Port Disabled while OLT Enabled
-#    [Documentation]    While OLT is enabled, disable PON port and validate state. Then
-#    ...                disable OLT, validate state, then enable OLT again verifying that
-#    ...                the OLT is enabled, but the PON Port is still not.
-#    [Tags]    statetest    tibitolttest
-#    [Setup]    Run Keywords    Start Logging    OLTNoOnuDisablePonWhileEnabled
-#    ...    AND    Clear All Devices Then Create New Device
-#    Run Keyword If    ${has_dataplane}    Clean Up Linux
-#
-#    # TODO: Move a subset of the REST checks into our own 'Create New Device' *** keywords ***
-#    #       so that all tests that need to run on a fully enabled and running OLT can do so
-#    Sleep   30s       # For now, just do a time delay
-#
-#    # Start test
-#    ${timeStart} =    Get Current Date
-#    Set Global Variable    ${timeStart}
-#
-#    # Disable all PON ports
-#    Disable Port   ${olt_device_id}
-#
-#    # TODO: Validate port setting with Wait Until
-#    # TODO: Validate OLT *** settings ***
-#
-#    Enable Port   ${olt_device_id}
-#
-#    # TODO: Enable all ports back
-#    # TODO: Validate port and olt
-#
-#
-##    Wait Until Keyword Succeeds    3    5s    Validate OLT Device    DISABLED    UNKNOWN    REACHABLE
-##    ...    ${olt_device_id}
-#
-#    [Teardown]    Run Keywords    Run Keyword If    ${logging}    Collect Logs
-#    ...    AND    Stop Logging    OLTNoOnuDisablePonWhileEnabled
-#
-#OLT Adapter PON Port Disabled while OLT Disabled
-#    [Documentation]    While OLT is disable, disable PON port and validate state. Then
-#    ...                enable OLT and verify that the OLT is enabled, but the PON is still not.
-#    [Tags]    statetest    tibitolttest
-#    [Setup]    Run Keywords    Start Logging    OLTNoOnuDisablePonWhileDisabled
-#    ...    AND    Clear All Devices Then Create New Device
-#    Run Keyword If    ${has_dataplane}    Clean Up Linux
-#
-#    # TODO: Move a subset of the REST checks into our own 'Create New Device' *** keywords ***
-#    #       so that all tests that need to run on a fully enabled and running OLT can do so
-#    Sleep   30s       # For now, just do a time delay
-#
-#    # Start test
-#    ${timeStart} =    Get Current Date
-#    Set Global Variable    ${timeStart}
-#
-#    # Disable all PON ports
-#    Disable Port   ${olt_device_id}
-#
-#    # TODO: Validate port setting with Wait Until
-#    # TODO: Validate OLT *** settings ***
-#
-#    Enable Port   ${olt_device_id}
-#
-#    # TODO: Enable all ports back
-#    # TODO: Validate port and olt
-#
-##    Wait Until Keyword Succeeds    3    5s    Validate OLT Device    DISABLED    UNKNOWN    REACHABLE
-##    ...    ${olt_device_id}
-#
-#    [Teardown]    Run Keywords    Run Keyword If    ${logging}    Collect Logs
-#    ...    AND    Stop Logging    OLTNoOnuDisablePonWhileDisabled
+OLT Adapter PON Port Disable and Reboot
+    [Documentation]    Verify that the PON Port(s) stays disabled across a reboot
+    [Tags]    statetest    tibitolttest
+    [Setup]    Run Keywords    Start Logging    OLTNoOnuPonPortAndReboot
+    ...    AND    Clear All Devices Then Create New Device
+    Run Keyword If    ${has_dataplane}    Clean Up Linux
+
+    # TODO: Move a subset of the REST checks into our own 'Create New Device' *** keywords ***
+    #       so that all tests that need to run on a fully enabled and running OLT can do so
+    Sleep   30s       # For now, just do a time delay
+
+    # Start test
+    ${timeStart} =    Get Current Date
+    Set Global Variable    ${timeStart}
+
+    # Disable all of the PON ports.  OLT state is enabled
+    ${port_numbers}=  Get OLT Ports  ${olt_device_id}   PON_OLT
+    FOR    ${port_number}    IN    @{port_numbers}
+        # Should be enabled by default
+        Wait Until Keyword Succeeds   10s  2s   Validate Port Admin Status
+        ...    ${olt_device_id}   ${port_number}    ENABLED
+
+        # TODO: For tibit, validate PON laser is on by default when OLT is first enabled
+
+        # Disable the port
+        Disable Port   ${olt_device_id}   ${port_number}
+        Wait Until Keyword Succeeds   ${port_timeout}   5s   Validate Port Admin Status
+        ...    ${olt_device_id}   ${port_number}    DISABLED
+
+        # TODO: For tibit, validate PON laser is turned off
+    END
+    # Reboot the OLT using "voltctl device reboot" command
+    Reboot Device    ${olt_device_id}
+    Sleep  ${reboot_pause}     # For now, pause long enough for reboot
+
+    # Will need to finish re-enable
+    Wait Until Keyword Succeeds  ${reboot_timeout}   5s    Validate OLT Device   ENABLED  ACTIVE  REACHABLE
+    ...    ${olt_device_id}
+
+    FOR    ${port_number}    IN    @{port_numbers}
+        # Make sure the PON port is disabled still
+        Wait Until Keyword Succeeds    ${port_timeout}   5s   Validate Port Admin Status
+        ...    ${olt_device_id}   ${port_number}    DISABLED
+
+        # TODO: For tibit, validate PON laser is turned off
+    END
+
+    # Do the same with the OLT device disabled
+    Disable Device   ${olt_device_id}
+    Wait Until Keyword Succeeds  ${disable_timeout}  5s   Validate OLT Device   DISABLED  UNKNOWN  REACHABLE
+    ...    ${olt_device_id}
+
+    FOR    ${port_number}    IN    @{port_numbers}
+        # Make sure the PON port is disabled still
+        Wait Until Keyword Succeeds   ${port_timeout}   5s   Validate Port Admin Status
+        ...    ${olt_device_id}   ${port_number}    DISABLED
+
+        # TODO: For tibit, validate PON laser is turned off
+    END
+    # Reboot the OLT using "voltctl device reboot" command
+    Reboot Device    ${olt_device_id}
+    Sleep  ${reboot_pause}      # For now, pause long enough for reboot
+
+    # Will need to finish re-enable
+    Wait Until Keyword Succeeds   ${reboot_timeout}   5s    Validate OLT Device   DISABLED  UNKNOWN  REACHABLE
+    ...    ${olt_device_id}
+
+    FOR    ${port_number}    IN    @{port_numbers}
+        # Make sure the PON port is disabled still
+        Wait Until Keyword Succeeds   ${port_timeout}  5s   Validate Port Admin Status
+        ...    ${olt_device_id}   ${port_number}    DISABLED
+
+        # TODO: For tibit, validate PON laser is turned off
+    END
+    [Teardown]    Run Keywords    Run Keyword If    ${logging}    Collect Logs
+    ...    AND    Stop Logging    OLTNoOnuPonPortAndReboot
 
 # TODO: A list of future tests to try (with no onus)
 #  - PON Port Disable  - Repeat 6 reboot tests above with PON port disabled
