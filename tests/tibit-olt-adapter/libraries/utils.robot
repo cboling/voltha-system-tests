@@ -26,6 +26,7 @@ Library           CORDRobot
 Library           ImportResource    resources=CORDRobot
 
 Resource          ../../../libraries/utils.robot
+Resource          ./etcd.robot
 
 *** Keywords ***
 

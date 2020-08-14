@@ -26,6 +26,7 @@ Resource          ../../variables/variables.robot
 
 Resource          ./libraries/utils.robot
 Resource          ./libraries/voltctl.robot
+Resource          ./libraries/etcd.robot
 
 *** Variables ***
 ${POD_NAME}                 cb-office-net
@@ -35,6 +36,15 @@ ${KUBERNETES_YAML}          ${KUBERNETES_CONFIGS_DIR}/${POD_NAME}.yml
 ${HELM_CHARTS_DIR}          ~/k8s/helm
 ${VOLTHA_POD_NUM}           8
 ${NAMESPACE}                voltha
+#
+# More control of namespaces
+#
+${INFRA_NS}          infra       # voltha        # onos, kafka, etcd
+${ADAPTER_NS}        adapters    # voltha        # device adapters
+${VOLTHA_NS}         voltha                      # rw-core, ofagent
+${DEVICE_NS}         devices     # voltha        # virtual devices -> bb-sim, lxc, ...
+
+${ETCD_namespace}    ${INFRA_NS}
 
 # For below variable value, using deployment name as using grep for
 # parsing radius pod name, we can also use full radius pod name
@@ -58,22 +68,26 @@ ${logging}              False
 ${pausebeforecleanup}   False
 
 # Timeouts so they are consistent. These are times without ONUs or flows present
-${enable_timeout}       15s     # OLT disable time to competion
-${disable_timeout}      15s     # OLT disable time to competion
-${reboot_window}         8s     # Time between reboot request and OLT finishing reboot
-${reboot_pause}         15s     # Wait before we start checking
-${reboot_timeout}       30s     # Reboot completed and back fully into enabled/disabled state
-${port_timeout}         15s     # Enable/disable port time to completion
+${enable_timeout}        15s     # OLT disable time to competion
+${disable_timeout}       15s     # OLT disable time to competion
+${reboot_window}          8s     # Time between reboot request and OLT finishing reboot
+${reboot_pause}          15s     # Wait before we start checking
+${reboot_timeout}        30s     # Reboot completed and back fully into enabled/disabled state
+${core_delete_timeout}   15s     # Delete request to delete completion in core timeout
+${adapter_delete_delay}  60s     # Additional time for adapter to cleanup on delete
+${port_timeout}          15s     # Enable/disable port time to completion
+${subprocess_wait}       40s     # Time after enable that most background processes have started
 
+    Sleep  ${adapter_delete_delay}
 *** Test Cases ***
 
 OLT Adapter Preprovisioning
     [Documentation]    Validates the Tibit OLT Device adapter can be pre-provisioned.  When
     ...                in the PreProvisoned state, the OLT device handler has not been instantiated
     ...                by the OLT Device Adapter.  Verify this by no ports being present
-    [Tags]    statetest    tibitolttest
-    [Setup]    Run Keywords    Start Logging    OLTPreprovisionTest
-    ...    AND    Delete All Devices and Verify
+    [Tags]    statetest     tibitolttest
+    [Setup]   Run Keywords  Start Logging    OLTPreprovisionTest
+    ...       AND           Delete All Devices and Verify
     Run Keyword If    ${has_dataplane}    Clean Up Linux
 
     # Start test
@@ -89,19 +103,24 @@ OLT Adapter Preprovisioning
     # Delete devices as part of test here. Normal teardown does a disable first and
     # and the core does not allow a 'preprovisioned' device to be disabled
     [Teardown]    Run Keywords    Delete Devices In Voltha    Root=true
+    ...    AND    ETCD Verify Adapter Cleaned Up  ${olt_device_id}
     ...    AND    Run Keyword If    ${logging}    Collect Logs
     ...    AND    Stop Logging    OLTPreprovisionTest
 
+
 OLT Adapter Can Be Enabled and Deleted
-    [Documentation]    Validates the Tibit OLT Device adapter can be enabled
-    [Tags]    statetest    tibitolttest
-    [Setup]    Run Keywords    Start Logging    OLTNoOnuEnableTest
-    ...    AND    Delete All Devices and Verify
+    [Documentation]    Validates the Tibit OLT Device adapter can be enabled.  This test test does
+    ...                not check for kv-store 'device' creation as it can take the core a small
+    ...                amount of time to spin up the adapter and we want to delete as soon as
+    ...                possible.  Kv-store creation validation is done in a later test.
+    [Tags]   statetest     tibitolttest
+    [Setup]  Run Keywords  Start Logging    OLTNoOnuEnableTest
+    ...      AND           Delete All Devices and Verify
     Run Keyword If    ${has_dataplane}    Clean Up Linux
 
     # Start test
-    ${timeStart} =    Get Current Date
-    Set Global Variable    ${timeStart}
+    ${timeStart} =       Get Current Date
+    Set Global Variable  ${timeStart}
 
     # Create and enable it.  Should provide us with a logical device ID once we
     # up and running.
@@ -123,17 +142,23 @@ OLT Adapter Can Be Enabled and Deleted
     # Delete it
     Delete Device    ${olt_device_id}
 
-    # TODO: Verify kv-store is scrubbed of OLT handler specific items
+    # Delete needs to complete before we check for cleanup
+    Wait Until Keyword Succeeds   ${core_delete_timeout}  2s  Validate Device Removed  ${olt_device_id}
+
+    # Verify kv-store is scrubbed of OLT handler specific items
+    Sleep  ${adapter_delete_delay}
+    ETCD Verify Adapter Cleaned Up  ${olt_device_id}
 
     [Teardown]    Run Keywords    Run Keyword If    ${logging}    Collect Logs
     ...    AND    Stop Logging    OLTNoOnuEnableTest
 
+
 OLT Adapter Can Be Disabled and Deleted
     [Documentation]    Validates the Tibit OLT Device adapter can be disabled after
     ...                previously being enabled and then deleted
-    [Tags]    statetest    tibitolttest
-    [Setup]    Run Keywords    Start Logging    OLTNoOnuDisableTest
-    ...    AND    Clear All Devices Then Create New Device
+    [Tags]    statetest     tibitolttest
+    [Setup]   Run Keywords  Start Logging    OLTNoOnuDisableTest
+    ...       AND           Clear All Devices Then Create New Device
     Run Keyword If    ${has_dataplane}    Clean Up Linux
 
     # TODO: Run through a few of the kv-store items (ResourceMgr, Logging, ...)
@@ -144,8 +169,8 @@ OLT Adapter Can Be Disabled and Deleted
     #       so that all tests that need to run on a fully enabled and running OLT can do so
     #
     # Start test
-    ${timeStart} =    Get Current Date
-    Set Global Variable    ${timeStart}
+    ${timeStart} =       Get Current Date
+    Set Global Variable  ${timeStart}
 
     # Disable (note device is still reachable in 'disabled' state
     Disable Device   ${olt_device_id}
@@ -159,39 +184,66 @@ OLT Adapter Can Be Disabled and Deleted
     # Delete it while disabled
     Delete Device    ${olt_device_id}
 
-    # TODO: Verify kv-store is scrubbed of OLT handler specific items
+    # Delete needs to complete before we check for cleanup
+    Wait Until Keyword Succeeds   ${core_delete_timeout}  2s  Validate Device Removed  ${olt_device_id}
+
+    # Verify kv-store is scrubbed of OLT handler specific items
+    Sleep  ${adapter_delete_delay}
+    ETCD Verify Adapter Cleaned Up  ${olt_device_id}
 
     [Teardown]    Run Keywords    Run Keyword If    ${logging}    Collect Logs
     ...    AND    Stop Logging    OLTNoOnuDisableTest
 
+
 OLT Adapter Cleans up kv-store on Delete
-    [Documentation]    Validates after delete of and OLT, kv-store is scrubbed
-    [Tags]    statetest    tibitolttest
-    [Setup]    Run Keywords    Start Logging    OLTNoOnuDeleteTest
-    ...    AND    Clear All Devices Then Create New Device
+    [Documentation]    Validates after delete of and OLT, kv-store is scrubbed.  While this
+    ...                Test is similar to the Enable and Delete above, it waits for the OLT
+    ...                to start up as well as most subsystems so that the kv-store is
+    ...                guaranteed to have additional keys.
+    [Tags]   statetest     tibitolttest
+    [Setup]  Run Keywords  Start Logging    OLTNoOnuDeleteTest
+    ...      AND           Clear All Devices Then Create New Device
     Run Keyword If    ${has_dataplane}    Clean Up Linux
 
     # Start test
-    ${timeStart} =    Get Current Date
-    Set Global Variable    ${timeStart}
+    ${timeStart} =       Get Current Date
+    Set Global Variable  ${timeStart}
 
-    # Let it run for a little bit so that most all processes have done
-    # something by now
-    Sleep     40s
+    # Let it run for a little bit so that most all background processes
+    # have done something by now.  Audits, PM collection, Heartbeat, Discovery, ...
+    Sleep     ${subprocess_wait}
+
+    # Verify that the core created a 'devices' row in etcd.  This row is only
+    # after the first enable of the device.  And also a few other well-known
+    # rows that should get cleaned up should exist.
+    ${rows}=         ETCD Get Voltha Service Keys  devices/${olt_device_id}
+    ${dev_length}=   Get Length  ${rows}
+    ${found_device}  Set Variable If  ${dev_length} == 1 and """${olt_device_id}""" in """${rows}"""   True   False
+    Should Be True   ${found_device}   Device ${olt_device_id} not in kv-store: ${rows} - ${dev_length} - ${found_device}
+
+    ${rows}=         ETCD Get Voltha Service Keys  resource_manager/xgspon/${olt_device_id}
+    ${row_count}=    Get Length  ${rows}
+    ${found_device}  Set Variable If  ${row_count} >= 1 and """${olt_device_id}""" in """${rows}[0]"""   True   False
+    Should Be True   ${found_device}   Resource Manager for ${olt_device_id} not in kv-store: ${rows} - ${row_count} - ${found_device}
 
     # Delete it
     Delete Device    ${olt_device_id}
 
-    # TODO: Verify kv-store is scrubbed of OLT handler specific items
+    # Delete needs to complete before we check for cleanup
+    Wait Until Keyword Succeeds   ${core_delete_timeout}  2s  Validate Device Removed  ${olt_device_id}
 
-    [Teardown]    Run Keywords    Run Keyword If    ${logging}    Collect Logs
-    ...    AND    Stop Logging    OLTNoOnuDeleteTest
+    # Verify kv-store is scrubbed of OLT handler specific items
+    Sleep  ${adapter_delete_delay}
+    ETCD Verify Adapter Cleaned Up  ${olt_device_id}
+
+    [Teardown]   Run Keywords  Run Keyword If    ${logging}    Collect Logs
+    ...    AND   Stop Logging  OLTNoOnuDeleteTest
 
 OLT Adapter Soft Reboot while Enabled
     [Documentation]    An OLT can be rebooted while it is enabled.
-    [Tags]    statetest    tibitolttest
-    [Setup]    Run Keywords    Start Logging    OLTNoOnuRebootEnabledTest
-    ...    AND    Clear All Devices Then Create New Device
+    [Tags]   statetest     tibitolttest
+    [Setup]  Run Keywords  Start Logging    OLTNoOnuRebootEnabledTest
+    ...      AND           Clear All Devices Then Create New Device
     Run Keyword If    ${has_dataplane}    Clean Up Linux
 
     # TODO: Move a subset of the REST checks into our own 'Create New Device' *** keywords ***
@@ -199,8 +251,8 @@ OLT Adapter Soft Reboot while Enabled
     Sleep   30s       # For now, just do a time delay
 
     # Start test
-    ${timeStart} =    Get Current Date
-    Set Global Variable    ${timeStart}
+    ${timeStart} =       Get Current Date
+    Set Global Variable  ${timeStart}
 
     # Reboot the OLT using "voltctl device reboot" command
     Reboot Device    ${olt_device_id}
@@ -210,7 +262,6 @@ OLT Adapter Soft Reboot while Enabled
 
     # TODO: Validate device port states changed as well 'during' reboot.
     #  OperStatus = UNKNOWN (close enough to INACTIVE)
-
 
     #  TODO: On OLT reset, SQA flags are reset right after the command is sent, since
     #        we are in the No-ONU state, disable discovery so we do not search for ONUs
@@ -233,9 +284,9 @@ OLT Adapter Soft Reboot while Enabled
 
 OLT Adapter Soft Reboot while Disabled
     [Documentation]    An OLT can be rebooted while it is enabled
-    [Tags]    statetest    tibitolttest
-    [Setup]    Run Keywords    Start Logging    OLTNoOnuRebootDisabledTest
-    ...    AND    Clear All Devices Then Create New Device
+    [Tags]   statetest     tibitolttest
+    [Setup]  Run Keywords  Start Logging    OLTNoOnuRebootDisabledTest
+    ...      AND           Clear All Devices Then Create New Device
     Run Keyword If    ${has_dataplane}    Clean Up Linux
 
     # TODO: Move a subset of the REST checks into our own 'Create New Device' *** keywords ***
@@ -243,8 +294,8 @@ OLT Adapter Soft Reboot while Disabled
     Sleep   30s       # For now, just do a time delay
 
     # Start test
-    ${timeStart} =    Get Current Date
-    Set Global Variable    ${timeStart}
+    ${timeStart} =       Get Current Date
+    Set Global Variable  ${timeStart}
 
     # Disable
     Disable Device   ${olt_device_id}
@@ -280,9 +331,9 @@ OLT Adapter Soft Reboot while Disabled
 
 OLT Adapter Disable During Soft Reboot
     [Documentation]    Reboot while enabled, but disable before reboot completes
-    [Tags]    statetest    tibitolttest
-    [Setup]    Run Keywords    Start Logging    OLTNoOnuDisableDuringRebootTest
-    ...    AND    Clear All Devices Then Create New Device
+    [Tags]   statetest     tibitolttest
+    [Setup]  Run Keywords  Start Logging    OLTNoOnuDisableDuringRebootTest
+    ...      AND           Clear All Devices Then Create New Device
     Run Keyword If    ${has_dataplane}    Clean Up Linux
 
     # TODO: Move a subset of the REST checks into our own 'Create New Device' *** keywords ***
@@ -290,8 +341,8 @@ OLT Adapter Disable During Soft Reboot
     Sleep  30s       # For now, just do a time delay
 
     # Start test
-    ${timeStart} =    Get Current Date
-    Set Global Variable    ${timeStart}
+    ${timeStart} =       Get Current Date
+    Set Global Variable  ${timeStart}
 
     # Reboot the OLT using "voltctl device reboot" command
     Reboot Device    ${olt_device_id}
@@ -318,9 +369,9 @@ OLT Adapter Disable During Soft Reboot
 
 OLT Adapter Enable During Soft Reboot
     [Documentation]    Reboot while disabled, but enable before reboot completes
-    [Tags]    statetest    tibitolttest
-    [Setup]    Run Keywords    Start Logging    OLTNoOnuEnableDuringRebootTest
-    ...    AND    Clear All Devices Then Create New Device
+    [Tags]   statetest     tibitolttest
+    [Setup]  Run Keywords  Start Logging    OLTNoOnuEnableDuringRebootTest
+    ...      AND           Clear All Devices Then Create New Device
     Run Keyword If    ${has_dataplane}    Clean Up Linux
 
     # TODO: Move a subset of the REST checks into our own 'Create New Device' *** keywords ***
@@ -328,8 +379,8 @@ OLT Adapter Enable During Soft Reboot
     Sleep   30s       # For now, just do a time delay
 
     # Start test
-    ${timeStart} =    Get Current Date
-    Set Global Variable    ${timeStart}
+    ${timeStart} =       Get Current Date
+    Set Global Variable  ${timeStart}
 
     # Disable
     Disable Device   ${olt_device_id}
@@ -361,9 +412,9 @@ OLT Adapter Enable During Soft Reboot
 
 OLT Adapter Delete During Soft Reboot while Enabled
     [Documentation]    Reboot while enabled, but delete before reboot completes
-    [Tags]    statetest    tibitolttest
-    [Setup]    Run Keywords    Start Logging    OLTNoOnuDeleteDuringEnabledReboot
-    ...    AND    Clear All Devices Then Create New Device
+    [Tags]   statetest     tibitolttest
+    [Setup]  Run Keywords  Start Logging    OLTNoOnuDeleteDuringEnabledReboot
+    ...      AND           Clear All Devices Then Create New Device
     Run Keyword If    ${has_dataplane}    Clean Up Linux
 
     # TODO: Move a subset of the REST checks into our own 'Create New Device' *** keywords ***
@@ -371,8 +422,8 @@ OLT Adapter Delete During Soft Reboot while Enabled
     Sleep   30s       # For now, just do a time delay
 
     # Start test
-    ${timeStart} =    Get Current Date
-    Set Global Variable    ${timeStart}
+    ${timeStart} =       Get Current Date
+    Set Global Variable  ${timeStart}
 
     # Reboot the OLT using "voltctl device reboot" command
     Reboot Device    ${olt_device_id}
@@ -383,16 +434,21 @@ OLT Adapter Delete During Soft Reboot while Enabled
     # Delete it while it is rebooting
     Delete Device    ${olt_device_id}
 
-    # TODO: Verify kv-store is scrubbed of OLT handler specific items
+    # Delete needs to complete before we check for cleanup
+    Wait Until Keyword Succeeds   ${core_delete_timeout}  2s  Validate Device Removed  ${olt_device_id}
+
+    # Verify kv-store is scrubbed of OLT handler specific items
+    Sleep  ${adapter_delete_delay}
+    ETCD Verify Adapter Cleaned Up  ${olt_device_id}
 
     [Teardown]    Run Keywords    Run Keyword If    ${logging}    Collect Logs
     ...    AND    Stop Logging    OLTNoOnuDeleteDuringEnabledReboot
 
 OLT Adapter Delete During Soft Reboot while Disabled
     [Documentation]    Reboot while disabled, but delete before reboot completes
-    [Tags]    statetest    tibitolttest
-    [Setup]    Run Keywords    Start Logging    OLTNoOnuDeleteDuringDisabledReboot
-    ...    AND    Clear All Devices Then Create New Device
+    [Tags]   statetest     tibitolttest
+    [Setup]  Run Keywords  Start Logging    OLTNoOnuDeleteDuringDisabledReboot
+    ...      AND           Clear All Devices Then Create New Device
     Run Keyword If    ${has_dataplane}    Clean Up Linux
 
     # TODO: Move a subset of the REST checks into our own 'Create New Device' *** keywords ***
@@ -400,8 +456,8 @@ OLT Adapter Delete During Soft Reboot while Disabled
     Sleep   30s       # For now, just do a time delay
 
     # Start test
-    ${timeStart} =    Get Current Date
-    Set Global Variable    ${timeStart}
+    ${timeStart} =       Get Current Date
+    Set Global Variable  ${timeStart}
 
     # Disable
     Disable Device   ${olt_device_id}
@@ -417,7 +473,12 @@ OLT Adapter Delete During Soft Reboot while Disabled
     # Delete it while it is rebooting
     Delete Device    ${olt_device_id}
 
-    # TODO: Verify kv-store is scrubbed of OLT handler specific items
+    # Delete needs to complete before we check for cleanup
+    Wait Until Keyword Succeeds   ${core_delete_timeout}  2s  Validate Device Removed  ${olt_device_id}
+
+    # Verify kv-store is scrubbed of OLT handler specific items
+    Sleep  ${adapter_delete_delay}
+    ETCD Verify Adapter Cleaned Up  ${olt_device_id}
 
     [Teardown]    Run Keywords    Run Keyword If    ${logging}    Collect Logs
     ...    AND    Stop Logging    OLTNoOnuDeleteDuringDisabledReboot
@@ -425,9 +486,9 @@ OLT Adapter Delete During Soft Reboot while Disabled
 OLT Adapter PON Port Disable and Enable
     [Documentation]    Verify that the PON Port(s) can be enabled and disabled. THe
     ...                PON optics are independent of the OLT state.
-    [Tags]    statetest    tibitolttest
-    [Setup]    Run Keywords    Start Logging    OLTNoOnuPonPortEnableDisable
-    ...    AND    Clear All Devices Then Create New Device
+    [Tags]   statetest     tibitolttest
+    [Setup]  Run Keywords  Start Logging    OLTNoOnuPonPortEnableDisable
+    ...      AND           Clear All Devices Then Create New Device
     Run Keyword If    ${has_dataplane}    Clean Up Linux
 
     # TODO: Move a subset of the REST checks into our own 'Create New Device' *** keywords ***
@@ -435,8 +496,8 @@ OLT Adapter PON Port Disable and Enable
     Sleep   30s       # For now, just do a time delay
 
     # Start test
-    ${timeStart} =    Get Current Date
-    Set Global Variable    ${timeStart}
+    ${timeStart} =       Get Current Date
+    Set Global Variable  ${timeStart}
 
     ${port_numbers}=  Get OLT Ports  ${olt_device_id}   PON_OLT
     FOR    ${port_number}    IN    @{port_numbers}
@@ -493,9 +554,9 @@ OLT Adapter PON Port Disable and Enable
 
 OLT Adapter PON Port Disable and Reboot
     [Documentation]    Verify that the PON Port(s) stays disabled across a reboot
-    [Tags]    statetest    tibitolttest
-    [Setup]    Run Keywords    Start Logging    OLTNoOnuPonPortAndReboot
-    ...    AND    Clear All Devices Then Create New Device
+    [Tags]   statetest     tibitolttest
+    [Setup]  Run Keywords  Start Logging    OLTNoOnuPonPortAndReboot
+    ...      AND           Clear All Devices Then Create New Device
     Run Keyword If    ${has_dataplane}    Clean Up Linux
 
     # TODO: Move a subset of the REST checks into our own 'Create New Device' *** keywords ***
@@ -503,8 +564,8 @@ OLT Adapter PON Port Disable and Reboot
     Sleep   30s       # For now, just do a time delay
 
     # Start test
-    ${timeStart} =    Get Current Date
-    Set Global Variable    ${timeStart}
+    ${timeStart} =       Get Current Date
+    Set Global Variable  ${timeStart}
 
     # Disable all of the PON ports.  OLT state is enabled
     ${port_numbers}=  Get OLT Ports  ${olt_device_id}   PON_OLT
@@ -637,7 +698,9 @@ Setup Suite
 
     # Start the test suite with a clean slate
     Delete All Devices and Verify
-    # TODO: verify a clean kv-store to start with
+
+    # Scrub kv-store of any previous data
+    ETCD Startup Scrub
 
 
 Clear All Devices Then Preprovision New Device
