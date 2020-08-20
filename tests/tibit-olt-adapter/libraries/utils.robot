@@ -27,12 +27,12 @@ Library           ImportResource    resources=CORDRobot
 
 Resource          ../../../libraries/utils.robot
 Resource          ./etcd.robot
+Resource          ./rest.robot
 
 *** Keywords ***
 
 Preprovision Tibit
     [Documentation]    Pre-test Setup for TibitOLT, but no enable
-    [Arguments]        ${disable_discovery}=False
 
     #test for empty device list
     Test Empty Device List
@@ -61,11 +61,23 @@ Setup Tibit
     ...                be reconciled in the new device adapter or on the hardware.
     [Arguments]       ${disable_discovery}=False
 
-    Preprovision Tibit    ${disable_discovery}
+    ${method}=   Set Variable If    ${disable_discovery}    manual    periodic
+    LOG  Discovery method will be ${method}
 
-    # Enable the device.
+    # Create the device handler
+    Preprovision Tibit
+
+    # Enable the device
     Enable Device    ${olt_device_id}
-    Wait Until Keyword Succeeds    60s    5s
-    ...    Validate OLT Device    ENABLED    ACTIVE    REACHABLE    ${olt_device_id}
-    ${logical_id}=    Get Logical Device ID From SN    ${olt_device_id}
-    Set Suite Variable    ${logical_id}
+    Wait Until Keyword Succeeds   10s    1s
+    ...   Validate OLT Device    ENABLED   ACTIVATING   UNKNOWN   ${olt_device_id}
+
+    # Make sure discovery is set how we want it for this test
+    REST Set Discovery Method    ${olt_device_id}  ${method}
+
+    # Wait until OLT reset and capabilities discovery have completed
+    Wait Until Keyword Succeeds   60s    5s
+    ...    Validate OLT Device    ENABLED   ACTIVE   REACHABLE   ${olt_device_id}
+
+    ${logical_id}=       Get Logical Device ID From SN    ${olt_device_id}
+    Set Suite Variable   ${logical_id}

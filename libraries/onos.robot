@@ -38,8 +38,8 @@ Validate OLT Device in ONOS
     FOR    ${INDEX}    IN RANGE    0    ${length}
         ${value}=    Get From List    ${jsondata['devices']}    ${INDEX}
         ${of_id}=    Get From Dictionary    ${value}    id
-        ${sn}=    Get From Dictionary    ${value}    serial
-        ${matched}=    Set Variable If    '${sn}' == '${serial_number}'    True    False
+        ${sn}=    Get From Dictionary    ${value}    serial`
+        ${matched}=    Set Variable If    '${sn}' == '${serial_number}'    True    False`
         Exit For Loop If    ${matched}
     END
     Should Be True    ${matched}    No match for ${serial_number} found

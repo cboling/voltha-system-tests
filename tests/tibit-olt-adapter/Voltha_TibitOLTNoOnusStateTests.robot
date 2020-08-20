@@ -22,11 +22,14 @@ Resource          ../../libraries/k8s.robot
 Resource          ../../variables/variables.robot
 
 # The following are similar to the resources above, but they have
-# tibit versions of the files
+# tibit versions of the keywords or additional capability for the
+# tests in this file
 
 Resource          ./libraries/utils.robot
 Resource          ./libraries/voltctl.robot
 Resource          ./libraries/etcd.robot
+Resource          ./libraries/rest.robot
+Resource          ./libraries/voltha.robot
 
 *** Variables ***
 ${POD_NAME}                 cb-office-net
@@ -38,6 +41,7 @@ ${VOLTHA_POD_NUM}           8
 ${NAMESPACE}                voltha
 #
 # More control of namespaces
+# TODO Have these passed in from the make command line
 #
 ${INFRA_NS}          infra       # voltha        # onos, kafka, etcd
 ${ADAPTER_NS}        adapters    # voltha        # device adapters
@@ -74,11 +78,10 @@ ${reboot_window}          8s     # Time between reboot request and OLT finishing
 ${reboot_pause}          15s     # Wait before we start checking
 ${reboot_timeout}        30s     # Reboot completed and back fully into enabled/disabled state
 ${core_delete_timeout}   15s     # Delete request to delete completion in core timeout
-${adapter_delete_delay}  60s     # Additional time for adapter to cleanup on delete
+${adapter_delete_delay}  10s     # Additional time for handler to cleanup on delete or process final dev reset
 ${port_timeout}          15s     # Enable/disable port time to completion
 ${subprocess_wait}       40s     # Time after enable that most background processes have started
 
-    Sleep  ${adapter_delete_delay}
 *** Test Cases ***
 
 OLT Adapter Preprovisioning
@@ -97,15 +100,12 @@ OLT Adapter Preprovisioning
     # Preprovision step
     Preprovision Tibit
 
-    # TODO: Get OLT NNI Ports.  Should be None at this point
-    # TODO: Get OLT PON Ports.  Should be None at this point
-
     # Delete devices as part of test here. Normal teardown does a disable first and
     # and the core does not allow a 'preprovisioned' device to be disabled
     [Teardown]    Run Keywords    Delete Devices In Voltha    Root=true
     ...    AND    ETCD Verify Adapter Cleaned Up  ${olt_device_id}
-    ...    AND    Run Keyword If    ${logging}    Collect Logs
-    ...    AND    Stop Logging    OLTPreprovisionTest
+    ...    AND    Run Keyword If   ${logging}    Collect Logs
+    ...    AND    Stop Logging     OLTPreprovisionTest
 
 
 OLT Adapter Can Be Enabled and Deleted
@@ -144,9 +144,9 @@ OLT Adapter Can Be Enabled and Deleted
 
     # Delete needs to complete before we check for cleanup
     Wait Until Keyword Succeeds   ${core_delete_timeout}  2s  Validate Device Removed  ${olt_device_id}
+    Sleep  ${adapter_delete_delay}
 
     # Verify kv-store is scrubbed of OLT handler specific items
-    Sleep  ${adapter_delete_delay}
     ETCD Verify Adapter Cleaned Up  ${olt_device_id}
 
     [Teardown]    Run Keywords    Run Keyword If    ${logging}    Collect Logs
@@ -186,9 +186,9 @@ OLT Adapter Can Be Disabled and Deleted
 
     # Delete needs to complete before we check for cleanup
     Wait Until Keyword Succeeds   ${core_delete_timeout}  2s  Validate Device Removed  ${olt_device_id}
+    Sleep  ${adapter_delete_delay}
 
     # Verify kv-store is scrubbed of OLT handler specific items
-    Sleep  ${adapter_delete_delay}
     ETCD Verify Adapter Cleaned Up  ${olt_device_id}
 
     [Teardown]    Run Keywords    Run Keyword If    ${logging}    Collect Logs
@@ -231,9 +231,9 @@ OLT Adapter Cleans up kv-store on Delete
 
     # Delete needs to complete before we check for cleanup
     Wait Until Keyword Succeeds   ${core_delete_timeout}  2s  Validate Device Removed  ${olt_device_id}
+    Sleep  ${adapter_delete_delay}
 
     # Verify kv-store is scrubbed of OLT handler specific items
-    Sleep  ${adapter_delete_delay}
     ETCD Verify Adapter Cleaned Up  ${olt_device_id}
 
     [Teardown]   Run Keywords  Run Keyword If    ${logging}    Collect Logs
@@ -436,9 +436,9 @@ OLT Adapter Delete During Soft Reboot while Enabled
 
     # Delete needs to complete before we check for cleanup
     Wait Until Keyword Succeeds   ${core_delete_timeout}  2s  Validate Device Removed  ${olt_device_id}
+    Sleep  ${adapter_delete_delay}
 
     # Verify kv-store is scrubbed of OLT handler specific items
-    Sleep  ${adapter_delete_delay}
     ETCD Verify Adapter Cleaned Up  ${olt_device_id}
 
     [Teardown]    Run Keywords    Run Keyword If    ${logging}    Collect Logs
@@ -475,9 +475,9 @@ OLT Adapter Delete During Soft Reboot while Disabled
 
     # Delete needs to complete before we check for cleanup
     Wait Until Keyword Succeeds   ${core_delete_timeout}  2s  Validate Device Removed  ${olt_device_id}
+    Sleep  ${adapter_delete_delay}
 
     # Verify kv-store is scrubbed of OLT handler specific items
-    Sleep  ${adapter_delete_delay}
     ETCD Verify Adapter Cleaned Up  ${olt_device_id}
 
     [Teardown]    Run Keywords    Run Keyword If    ${logging}    Collect Logs
@@ -690,11 +690,20 @@ Setup Suite
     @{container_list}=    Create List    adapter-tibit-olt  adapter-open-olt    adapter-open-onu    voltha-api-server
     ...    voltha-ro-core    voltha-rw-core-11    voltha-rw-core-12    voltha-ofagent
     Set Suite Variable    ${container_list}
-    ${datetime}=    Get Current Date
+
+    ${datetime}=          Get Current Date
     Set Suite Variable    ${datetime}
 
-    ${switch_type}=    Get Variable Value    ${web_power_switch.type}
-    Run Keyword If  "${switch_type}"!=""    Set Global Variable    ${powerswitch_type}    ${switch_type}
+    ${switch_type}=  Get Variable Value     ${web_power_switch.type}
+    Run Keyword If   "${switch_type}"!=""   Set Global Variable    ${powerswitch_type}    ${switch_type}
+
+    # Restart the port-forwarder for the TIBIT REST diagnostic interface.  Pause
+    # briefly afterwards in case background loop pauses some between spawns of the forwarder
+    Restart VOLTHA Port Forward Tibit
+    Sleep  1s
+
+    # Use REST to GET the Tibit build infomation
+    REST Get Build Info
 
     # Start the test suite with a clean slate
     Delete All Devices and Verify

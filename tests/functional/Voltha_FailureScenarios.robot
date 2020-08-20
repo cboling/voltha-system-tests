@@ -512,7 +512,7 @@ Sanity E2E Test for OLT/ONU on POD With Core Fail and Restart
     Scale K8s Deployment    voltha    voltha-voltha-rw-core    1
     Wait Until Keyword Succeeds    ${timeout}    2s
     ...    Check Expected Available Deployment Replicas    voltha    voltha-voltha-rw-core    1
-    Wait Until Keyword Succeeds    ${timeout}    2s
+    Wait Until Keyword S`ucceeds    ${timeout}    2s
     ...    Check Expected Available Deployment Replicas    voltha    voltha-voltha-ofagent    1
     # For some reason scaling down and up the POD behind a service causes the port forward to stop working,
     # so restart the port forwarding for the API service
